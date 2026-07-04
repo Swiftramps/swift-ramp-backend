@@ -1,2 +1,21 @@
-config.bat
-node_modules
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment secrets — never commit real values
+.env
+.env.local
+
+# Logs
+npm-debug.log*
+*.log
+
+# OS/editor cruft
+.DS_Store
+.vscode/
+.idea/
+
+# TypeScript incremental build info
+*.tsbuildinfo
