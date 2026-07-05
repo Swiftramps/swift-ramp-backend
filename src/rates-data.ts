@@ -1,7 +1,7 @@
 // Mock FX rates — modified by 50-commits script
 export const mockRates: Record<string, number> = {
   USD: 1,
-  NGN: 1587.14,
+  NGN: 1590.33,
   KES: 129,
   GHS: 12.46,
   ZAR: 18.14,
