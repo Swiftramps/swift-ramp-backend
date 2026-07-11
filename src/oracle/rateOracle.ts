@@ -1,13 +1,12 @@
 import cron from 'node-cron'
 import { config } from '../config'
 import { pushRate } from '../lib/stellar'
+import { toScaledRate } from '../lib/rates'
 
 // Free, no-API-key exchange rate source, base USD. Swap this out for a paid
 // provider (or your own aggregated feed) if you need tighter SLAs — this is
 // meant as a working default, not a guaranteed-uptime dependency.
 const FX_SOURCE_URL = 'https://open.er-api.com/v6/latest/USD'
-
-const RATE_SCALE = 10_000_000n
 
 async function fetchUsdRates(): Promise<Record<string, number>> {
   const res = await fetch(FX_SOURCE_URL)
@@ -15,13 +14,6 @@ async function fetchUsdRates(): Promise<Record<string, number>> {
   const data = (await res.json()) as { result: string; rates: Record<string, number> }
   if (data.result !== 'success') throw new Error('FX source reported failure')
   return data.rates
-}
-
-function toScaledRate(rateVsUsd: number): bigint {
-  // Contract rates are all expressed against the same implicit base unit
-  // (see lib.rs comments) — using "USD = 1.0" as that base, scaled by
-  // RATE_SCALE, matches the contract's quote() math directly.
-  return BigInt(Math.round(rateVsUsd * Number(RATE_SCALE)))
 }
 
 export async function runOracleOnce(log: { info: (msg: string) => void; error: (msg: unknown) => void }) {
