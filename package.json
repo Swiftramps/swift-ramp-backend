@@ -18,6 +18,9 @@
     "url": "https://github.com/Stellar-AGix/swiftramp-backend/issues"
   },
   "homepage": "https://github.com/Stellar-AGix/swiftramp-backend#readme",
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.1"
+  },
   "devDependencies": {
     "@types/node": "^26.1.0",
     "@types/node-cron": "^3.0.11",
