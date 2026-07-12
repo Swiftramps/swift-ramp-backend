@@ -1,14 +1,19 @@
 import { FastifyInstance } from 'fastify'
 import { getSwapHistory } from '../lib/stellar'
 
+const historySchema = {
+  params: {
+    type: 'object',
+    required: ['address'],
+    properties: {
+      address: { type: 'string', pattern: '^G[A-Z0-9]{55}$' },
+    },
+  },
+}
+
 export async function historyRoutes(app: FastifyInstance) {
-  app.get<{ Params: { address: string } }>('/history/:address', async (request, reply) => {
-    try {
-      const history = await getSwapHistory(request.params.address)
-      return { address: request.params.address, swaps: history }
-    } catch (err) {
-      request.log.error(err)
-      return reply.code(502).send({ error: err instanceof Error ? err.message : 'History lookup failed' })
-    }
+  app.get<{ Params: { address: string } }>('/history/:address', { schema: historySchema }, async (request, reply) => {
+    const history = await getSwapHistory(request.params.address)
+    return { address: request.params.address, swaps: history }
   })
 }
