@@ -9,6 +9,12 @@ import { startRateOracle } from './oracle/rateOracle'
 async function main() {
   const app = Fastify({ logger: true })
 
+  app.setErrorHandler((err, request, reply) => {
+    request.log.error(err)
+    const statusCode = err.statusCode ?? 502
+    reply.code(statusCode).send({ error: err.message ?? 'Internal server error' })
+  })
+
   await app.register(cors, { origin: true })
 
   app.get('/health', async () => ({ ok: true }))
