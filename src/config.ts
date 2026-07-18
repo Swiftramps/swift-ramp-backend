@@ -12,13 +12,14 @@ export const config = {
   networkPassphrase: process.env.NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015',
   swapContractId: required('SWAP_CONTRACT_ID'),
 
-  // The oracle key is a SEPARATE identity from your CLI "admin" if you want,
-  // but it must be the same address you passed as `admin` to `initialize`
-  // on the contract, since only that address can call set_rate.
   oracleSecretKey: required('ORACLE_SECRET_KEY'),
 
   currencyTokens: JSON.parse(process.env.CURRENCY_TOKENS_JSON || '{}') as Record<string, string>,
 
-  // How often the rate oracle polls a real FX source and pushes updates on-chain.
   oracleIntervalMs: Number(process.env.ORACLE_INTERVAL_MS || 5 * 60 * 1000),
+
+  nodeEnv: process.env.NODE_ENV || 'development',
+  allowedOrigins: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : true,
 }

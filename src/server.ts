@@ -15,7 +15,15 @@ async function main() {
     reply.code(statusCode).send({ error: err.message ?? 'Internal server error' })
   })
 
-  await app.register(cors, { origin: true })
+  await app.register(cors, { origin: config.allowedOrigins })
+
+  if (config.nodeEnv === 'production') {
+    const rateLimit = await import('@fastify/rate-limit')
+    await app.register(rateLimit.default, {
+      max: 100,
+      timeWindow: '1 minute',
+    })
+  }
 
   app.get('/health', async () => ({ ok: true }))
 
