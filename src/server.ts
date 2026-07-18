@@ -20,7 +20,7 @@ async function main() {
   if (config.nodeEnv === 'production') {
     const rateLimit = await import('@fastify/rate-limit')
     await app.register(rateLimit.default, {
-      max: 100,
+      max: config.standardRateLimitMax,
       timeWindow: '1 minute',
     })
   }
