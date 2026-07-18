@@ -7,6 +7,8 @@ function required(name: string): string {
 }
 
 export const config = {
+  auditRateLimitMax: Number(process.env.AUDIT_RATE_LIMIT_MAX || 20),
+  standardRateLimitMax: Number(process.env.STANDARD_RATE_LIMIT_MAX || 100),
   port: Number(process.env.PORT || 4000),
   sorobanRpcUrl: process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org',
   networkPassphrase: process.env.NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015',
