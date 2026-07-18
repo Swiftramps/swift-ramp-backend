@@ -4,6 +4,7 @@ import { config } from './config'
 import { quoteRoutes } from './routes/quote'
 import { swapRoutes } from './routes/swap'
 import { historyRoutes } from './routes/history'
+import { auditRoutes } from './routes/audit'
 import { startRateOracle } from './oracle/rateOracle'
 
 async function main() {
@@ -30,6 +31,7 @@ async function main() {
   await app.register(quoteRoutes)
   await app.register(swapRoutes)
   await app.register(historyRoutes)
+  await app.register(auditRoutes)
 
   startRateOracle(app.log)
 
