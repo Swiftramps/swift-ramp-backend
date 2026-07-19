@@ -100,42 +100,116 @@ npm start
 
 ### `GET /health`
 Liveness check.
+
+**Response**
 ```json
 { "ok": true }
 ```
 
-### `GET /quote?from=USD&to=NGN&amount=100`
+**Example curl**
+```bash
+curl http://localhost:4000/health
+```
+
+---
+
+### `GET /quote`
 Read-only conversion preview, computed by simulating the contract's own `quote` function — so the number returned is guaranteed to match what an actual swap would produce, not a client-side copy of the rate table.
 
+**Query parameters**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `from` | string | Yes | Source currency code (3 letters, e.g., USD) |
+| `to` | string | Yes | Target currency code (3 letters, e.g., NGN) |
+| `amount` | string | Yes | Amount to convert (decimal number as string) |
+
 **Response**
 ```json
-{ "from": "USD", "to": "NGN", "sendAmount": "100", "receiveAmount": "158000.0000000" }
+{
+  "from": "USD",
+  "to": "NGN",
+  "sendAmount": "100",
+  "receiveAmount": "158000.0000000"
+}
 ```
+
+**Error cases**
+- 400: Missing or invalid query parameters
+- 502: Simulation failed or RPC error
+
+**Example curl**
+```bash
+curl "http://localhost:4000/quote?from=USD&to=NGN&amount=100"
+```
+
+---
 
 ### `POST /swap/submit`
-Relays an already-signed transaction to the network and waits for confirmation. The frontend builds and signs this transaction itself (e.g. via Freighter) — this endpoint never sees a private key.
+Relays an already-signed transaction to the network and waits for confirmation. The frontend builds and signs this transaction itself (e.g., via Freighter) — this endpoint never sees a private key.
 
-**Body**
+**Request body**
 ```json
-{ "signedTxXdr": "<base64 signed transaction envelope>" }
+{
+  "signedTxXdr": "<base64 signed transaction envelope>"
+}
 ```
 
 **Response**
 ```json
-{ "txHash": "a3f...", "receivedAmount": "1580000000000" }
+{
+  "txHash": "a3f...",
+  "receivedAmount": "1580000000000"
+}
 ```
+
+**Error cases**
+- 400: Missing or invalid `signedTxXdr`
+- 502: Transaction rejected by Soroban RPC or failed to confirm within timeout
+
+**Example curl**
+```bash
+curl -X POST http://localhost:4000/swap/submit \
+  -H "Content-Type: application/json" \
+  -d '{"signedTxXdr": "AAAAAgAAAAA..."}'
+```
+
+---
 
 ### `GET /swap/:hash/status`
 Polls the ledger for a transaction's current status.
 
+**Path parameters**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `hash` | string | Yes | Transaction hash |
+
 **Response**
 ```json
-{ "status": "SUCCESS", "receivedAmount": "1580000000000" }
+{
+  "status": "SUCCESS",
+  "receivedAmount": "1580000000000"
+}
 ```
-`status` is one of `SUCCESS`, `FAILED`, `NOT_FOUND`.
+
+Status values:
+- `SUCCESS`: Transaction succeeded
+- `FAILED`: Transaction failed
+- `NOT_FOUND`: Transaction not found in ledger
+
+**Example curl**
+```bash
+curl http://localhost:4000/swap/a3f.../status
+```
+
+---
 
 ### `GET /history/:address`
-Recent `swap` contract events involving the given address, either as sender or recipient.
+Recent `swap` contract events involving the given address, either as sender or recipient. Note this reads directly from the RPC provider's event stream, which typically retains only recent history (days, not months).
+
+**Path parameters**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `address` | string | Yes | Stellar public key (must start with G and be 56 characters long) |
 
 **Response**
 ```json
@@ -151,6 +225,56 @@ Recent `swap` contract events involving the given address, either as sender or r
     }
   ]
 }
+```
+
+**Error cases**
+- 400: Invalid Stellar address
+
+**Example curl**
+```bash
+curl http://localhost:4000/history/GDNSOJUOGMIOOBZVSCE2XB7F7WGBHVC3ELL3N47ANO3QFOKN4UMHCIQJ
+```
+
+---
+
+### `GET /audit/contract`
+Returns contract audit information: admin address and current registered currency rates.
+
+**Response**
+```json
+{
+  "admin": "G...",
+  "rates": {
+    "USD": "10000000",
+    "NGN": "1580000000"
+  }
+}
+```
+
+**Error cases**
+- 502: Simulation failed or RPC error
+
+**Example curl**
+```bash
+curl http://localhost:4000/audit/contract
+```
+
+---
+
+### `GET /audit/oracle`
+Returns oracle audit information: oracle public address and configured update interval.
+
+**Response**
+```json
+{
+  "address": "G...",
+  "intervalMs": 300000
+}
+```
+
+**Example curl**
+```bash
+curl http://localhost:4000/audit/oracle
 ```
 
 > **Note:** this reads live from the RPC provider's event stream, which typically only retains recent history (days, not months). For a permanent activity log, add a small database that persists events as they're observed rather than re-querying the ledger on every request.

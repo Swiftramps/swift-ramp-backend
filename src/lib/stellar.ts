@@ -161,6 +161,54 @@ export async function getSwapHistory(address: string, limit = 20) {
   return matches.slice(0, limit)
 }
 
+export async function getContractRates(): Promise<Record<string, string>> {
+  const account = await server.getAccount(oracleKeypair.publicKey())
+  const op = contract.call('get_rates')
+  const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: config.networkPassphrase })
+    .addOperation(op)
+    .setTimeout(30)
+    .build()
+
+  const sim = await server.simulateTransaction(tx)
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`get_rates simulation failed: ${sim.error}`)
+  }
+  if (!sim.result) {
+    throw new Error('get_rates simulation returned no result')
+  }
+  const nativeResult = scValToNative(sim.result.retval) as Record<string, bigint>
+  const rates: Record<string, string> = {}
+  for (const [currency, rate] of Object.entries(nativeResult)) {
+    rates[currency] = rate.toString()
+  }
+  return rates
+}
+
+export async function getContractAdmin(): Promise<string> {
+  const account = await server.getAccount(oracleKeypair.publicKey())
+  const op = contract.call('get_admin')
+  const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: config.networkPassphrase })
+    .addOperation(op)
+    .setTimeout(30)
+    .build()
+
+  const sim = await server.simulateTransaction(tx)
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`get_admin simulation failed: ${sim.error}`)
+  }
+  if (!sim.result) {
+    throw new Error('get_admin simulation returned no result')
+  }
+  return scValToNative(sim.result.retval) as string
+}
+
+export async function getOracleInfo(): Promise<{ address: string; intervalMs: number }> {
+  return {
+    address: oracleKeypair.publicKey(),
+    intervalMs: config.oracleIntervalMs,
+  }
+}
+
 async function pollUntilConfirmed(hash: string, timeoutMs = 30_000): Promise<string> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
