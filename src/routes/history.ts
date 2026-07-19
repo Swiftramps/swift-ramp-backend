@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { getSwapHistory } from '../lib/stellar'
+import { config } from '../config'
 
 const historySchema = {
   params: {
@@ -12,9 +13,21 @@ const historySchema = {
 }
 
 export async function historyRoutes(app: FastifyInstance) {
-  app.get<{ Params: { address: string } }>('/history/:address', { schema: historySchema }, async (request, reply) => {
-    const { address } = request.params
-    const history = await getSwapHistory(address)
-    return { address, swaps: history }
-  })
+  app.get<{ Params: { address: string } }>(
+    '/history/:address',
+    {
+      schema: historySchema,
+      config: {
+        rateLimit: {
+          max: config.auditRateLimitMax,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async (request, reply) => {
+      const { address } = request.params
+      const history = await getSwapHistory(address)
+      return { address, swaps: history }
+    }
+  )
 }
