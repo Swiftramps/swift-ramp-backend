@@ -1,6 +1,7 @@
-import { FastifyInstance } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { getQuote } from '../lib/stellar'
 import { toScaledAmount, fromScaledAmount } from '../lib/rates'
+import { config } from '../config'
 
 const quoteSchema = {
   querystring: {
@@ -15,9 +16,21 @@ const quoteSchema = {
 }
 
 export async function quoteRoutes(app: FastifyInstance) {
-  app.get<{ Querystring: { from: string; to: string; amount: string } }>('/quote', { schema: quoteSchema }, async (request, reply) => {
-    const { from, to, amount } = request.query
-    const scaledReceive = await getQuote(from, to, toScaledAmount(amount))
-    return { from, to, sendAmount: amount, receiveAmount: fromScaledAmount(scaledReceive) }
-  })
+  app.get<{ Querystring: { from: string; to: string; amount: string } }>(
+    '/quote',
+    {
+      schema: quoteSchema,
+      config: {
+        rateLimit: {
+          max: config.auditRateLimitMax,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async request => {
+      const { from, to, amount } = request.query
+      const scaledReceive = await getQuote(from, to, toScaledAmount(amount))
+      return { from, to, sendAmount: amount, receiveAmount: fromScaledAmount(scaledReceive) }
+    }
+  )
 }

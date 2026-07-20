@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { computeProofHash, verifyProofHash } from '../lib/proofHash'
+import { createEnrollment, getEnrollment, getEnrollmentsByAddress } from '../lib/enrollment'
 
 const enrollSchema = {
   body: {
@@ -26,12 +27,38 @@ const verifySchema = {
   },
 }
 
+const createSchema = {
+  body: {
+    type: 'object',
+    required: ['address'],
+    properties: {
+      address: { type: 'string', pattern: '^G[A-Z0-9]{55}$' },
+      data: { type: 'object' },
+    },
+  },
+}
+
+const getSchema = {
+  params: {
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'integer' },
+    },
+  },
+}
+
+const addressSchema = {
+  params: {
+    type: 'object',
+    required: ['address'],
+    properties: {
+      address: { type: 'string', pattern: '^G[A-Z0-9]{55}$' },
+    },
+  },
+}
+
 export async function enrollmentRoutes(app: FastifyInstance) {
-  /**
-   * POST /enrollment
-   * Accepts enrollment inputs, computes the SHA-256 proof hash in the same
-   * preimage format as the on-chain contract, and returns it.
-   */
   app.post<{
     Body: { timestampSec: number; identity: string; queueId: string }
   }>('/enrollment', { schema: enrollSchema }, async (request) => {
@@ -40,11 +67,6 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     return { proofHash }
   })
 
-  /**
-   * POST /enrollment/verify
-   * Re-derives the proof hash from the supplied inputs and compares it to
-   * the provided `proofHash`. Returns `{ valid: true }` on match.
-   */
   app.post<{
     Body: { timestampSec: number; identity: string; queueId: string; proofHash: string }
   }>('/enrollment/verify', { schema: verifySchema }, async (request, reply) => {
@@ -55,4 +77,39 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     }
     return { valid: true }
   })
+
+  app.post<{ Body: { address: string; data?: Record<string, unknown> } }>(
+    '/enrollments',
+    { schema: createSchema },
+    async (request, reply) => {
+      const enrollment = createEnrollment({
+        address: request.body.address,
+        data: request.body.data,
+      })
+      reply.code(201)
+      return enrollment
+    }
+  )
+
+  app.get<{ Params: { id: number } }>(
+    '/enrollments/:id',
+    { schema: getSchema },
+    async (request, reply) => {
+      const enrollment = getEnrollment(request.params.id)
+      if (!enrollment) {
+        reply.code(404)
+        return { error: 'Enrollment not found' }
+      }
+      return enrollment
+    }
+  )
+
+  app.get<{ Params: { address: string } }>(
+    '/enrollments/address/:address',
+    { schema: addressSchema },
+    async (request, reply) => {
+      const enrollments = getEnrollmentsByAddress(request.params.address)
+      return { address: request.params.address, enrollments }
+    }
+  )
 }

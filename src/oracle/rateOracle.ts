@@ -2,6 +2,7 @@ import cron from 'node-cron'
 import { config } from '../config'
 import { pushRate } from '../lib/stellar'
 import { toScaledRate } from '../lib/rates'
+import { insertOracleRate } from '../db/models'
 
 // Free, no-API-key exchange rate source, base USD. Swap this out for a paid
 // provider (or your own aggregated feed) if you need tighter SLAs — this is
@@ -39,6 +40,13 @@ export async function runOracleOnce(log: { info: (msg: string) => void; error: (
     }
     try {
       const hash = await pushRate(currency, toScaledRate(rateVsUsd))
+      insertOracleRate({
+        from_currency: 'USD',
+        to_currency: currency,
+        rate: rateVsUsd.toString(),
+        source: FX_SOURCE_URL,
+        timestamp: Date.now()
+      });
       log.info(`Updated ${currency} rate to ${rateVsUsd} (tx ${hash})`)
     } catch (err) {
       log.error(`Failed to push rate for ${currency}: ${err instanceof Error ? err.message : err}`)
