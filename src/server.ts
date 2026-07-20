@@ -5,8 +5,12 @@ import { quoteRoutes } from './routes/quote'
 import { swapRoutes } from './routes/swap'
 import { historyRoutes } from './routes/history'
 import { auditRoutes } from './routes/audit'
+import { oracleRoutes } from './routes/oracle'
 import { enrollmentRoutes } from './routes/enrollment'
 import { startRateOracle } from './oracle/rateOracle'
+import { initDb } from './db/database'
+import { getDbStats } from './db/models'
+import { backfillSwaps, startIndexer } from './db/indexer'
 import type { AppConfig } from './config'
 
 export async function buildServer(
@@ -45,11 +49,25 @@ export async function buildServer(
   }
 
   app.get('/health', async () => ({ ok: true }))
+  app.get('/health/db', async () => {
+    try {
+      const stats = getDbStats()
+      return { status: 'ok', ...stats }
+    } catch (err) {
+      return { status: 'error', error: err instanceof Error ? err.message : err }
+    }
+  })
+
+  // Initialize DB and background jobs
+  initDb()
+  await backfillSwaps(app.log)
+  startIndexer(app.log)
 
   await app.register(quoteRoutes)
   await app.register(swapRoutes)
   await app.register(historyRoutes)
   await app.register(auditRoutes)
+  await app.register(oracleRoutes)
   await app.register(enrollmentRoutes)
 
   return app
