@@ -81,6 +81,31 @@ Then fill in `.env`:
 | `ORACLE_SECRET_KEY` | Secret key (`S...`) of the contract's `admin` account — get it with `stellar keys show admin` |
 | `CURRENCY_TOKENS_JSON` | JSON map of currency code → token contract address, e.g. `{"USD":"C...","NGN":"C..."}` |
 | `ORACLE_INTERVAL_MS` | How often the rate oracle runs, in milliseconds (default 5 minutes) |
+| `NODE_ENV` | Runtime environment. Only `development` mirrors arbitrary CORS origins. |
+| `ALLOWED_ORIGINS` | Required for browser access in production. Comma-separated exact origins. |
+
+### CORS configuration
+
+Development mode accepts requests from any browser origin for local tooling. In
+production, browser requests to API routes are accepted only when their
+`Origin` header exactly matches an entry in `ALLOWED_ORIGINS`. Whitespace
+around comma-separated entries is ignored.
+
+For example:
+
+```env
+NODE_ENV=production
+ALLOWED_ORIGINS=https://swiftramp.com,https://app.swiftramp.com
+```
+
+Requests without an `Origin` header, such as server-to-server and CLI
+requests, remain supported. The `/health` endpoint is always public for
+deployment probes. If `ALLOWED_ORIGINS` is omitted in production,
+cross-origin browser requests are denied by default.
+
+Rate limits are keyed by allowed origin when one is present and by client IP
+otherwise, preventing one frontend origin from consuming another origin's
+quota.
 
 **3. Run in development**
 ```bash
@@ -297,8 +322,8 @@ If the FX source is unreachable, or a specific currency isn't in the response, t
 ## Security notes
 
 - `ORACLE_SECRET_KEY` can move real funds via `set_rate` authorization and should be treated like any production private key — use a secrets manager in deployment, not a plaintext `.env` file on a shared server.
-- CORS is currently wide open (`origin: true`) for development convenience. Restrict this to your actual frontend domain before deploying publicly.
-- This service does not rate-limit or authenticate incoming requests. Add rate limiting (e.g. `@fastify/rate-limit`) before exposing it beyond local development.
+- CORS mirrors request origins only in development. Production deployments must configure `ALLOWED_ORIGINS`.
+- Production requests are rate-limited per browser origin, falling back to client IP for requests without an `Origin` header.
 
 ---
 

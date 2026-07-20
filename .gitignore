@@ -5,8 +5,6 @@ node_modules/
 dist/
 
 # Environment secrets — never commit real values
-.env
-.env.local
 
 # Logs
 npm-debug.log*
@@ -14,8 +12,8 @@ npm-debug.log*
 
 # OS/editor cruft
 .DS_Store
-.vscode/
 .idea/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+config.bat
