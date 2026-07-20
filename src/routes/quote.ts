@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { getQuote } from '../lib/stellar'
 import { toScaledAmount, fromScaledAmount } from '../lib/rates'
 import { config } from '../config'
@@ -27,7 +27,7 @@ export async function quoteRoutes(app: FastifyInstance) {
         },
       },
     },
-    async (request, reply) => {
+    async request => {
       const { from, to, amount } = request.query
       const scaledReceive = await getQuote(from, to, toScaledAmount(amount))
       return { from, to, sendAmount: amount, receiveAmount: fromScaledAmount(scaledReceive) }
