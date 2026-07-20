@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { getContractRates, getContractAdmin, getOracleInfo } from '../lib/stellar'
 
 export async function auditRoutes(app: FastifyInstance) {

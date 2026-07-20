@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { getSwapHistory } from '../lib/stellar'
 import { config } from '../config'
 
@@ -24,7 +24,7 @@ export async function historyRoutes(app: FastifyInstance) {
         },
       },
     },
-    async (request, reply) => {
+    async request => {
       const { address } = request.params
       const history = await getSwapHistory(address)
       return { address, swaps: history }
