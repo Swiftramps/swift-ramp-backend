@@ -50,3 +50,8 @@ export function getAllEnrollments(): Enrollment[] {
   const db = getDb()
   return db.prepare('SELECT * FROM enrollments ORDER BY created_at DESC').all() as Enrollment[]
 }
+
+export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefined {
+  const db = getDb()
+  return db.prepare('SELECT * FROM enrollments WHERE proof_hash = ?').get(proofHash) as Enrollment | undefined
+}
