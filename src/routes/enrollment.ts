@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { computeProofHash, verifyProofHash } from '../lib/proofHash'
 import { createEnrollment, getEnrollment, getEnrollmentsByAddress } from '../lib/enrollment'
 
@@ -111,7 +111,7 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   app.get<{ Params: { address: string } }>(
     '/enrollments/address/:address',
     { schema: addressSchema },
-    async (request, reply) => {
+    async (request) => {
       const enrollments = getEnrollmentsByAddress(request.params.address)
       return { address: request.params.address, enrollments }
     }
