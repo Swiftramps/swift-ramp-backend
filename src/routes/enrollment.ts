@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { computeProofHash, verifyProofHash } from '../lib/proofHash'
-import { createEnrollment, getEnrollment, getEnrollmentsByAddress } from '../lib/enrollment'
+import { createEnrollment, getEnrollment, getEnrollmentsByAddress, verifyEnrollmentProofHash } from '../lib/enrollment'
 
 const enrollSchema = {
   body: {
@@ -58,6 +58,16 @@ const addressSchema = {
   },
 }
 
+const proofHashVerifySchema = {
+  params: {
+    type: 'object',
+    required: ['hash'],
+    properties: {
+      hash: { type: 'string', pattern: '^[0-9a-fA-F]{64}$' },
+    },
+  },
+}
+
 export async function enrollmentRoutes(app: FastifyInstance) {
   app.post<{
     Body: { timestampSec: number; identity: string; queueId: string }
@@ -110,6 +120,24 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const enrollments = getEnrollmentsByAddress(request.params.address)
       return { address: request.params.address, enrollments }
+    }
+  )
+
+  app.get<{ Params: { hash: string } }>(
+    '/enrollments/:hash/verify',
+    { schema: proofHashVerifySchema },
+    async (request, reply) => {
+      const { hash } = request.params
+      
+      try {
+        const result = verifyEnrollmentProofHash(hash)
+        return result
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Enrollment not found') {
+          return reply.code(404).send({ error: 'Enrollment not found' })
+        }
+        return reply.code(400).send({ error: error instanceof Error ? error.message : 'Verification failed' })
+      }
     }
   )
 }

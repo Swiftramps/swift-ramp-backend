@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { getDb } from './database'
+import { computeProofHash } from './proofHash'
 
 export interface Enrollment {
   id: number
@@ -12,12 +13,25 @@ export interface Enrollment {
 export interface CreateEnrollmentInput {
   address: string
   data?: Record<string, unknown>
+  timestampSec?: number | bigint
+  identity?: string
+  queueId?: string
 }
 
 export function createEnrollment(input: CreateEnrollmentInput): Enrollment {
   const db = getDb()
   const now = new Date().toISOString()
-  const data = JSON.stringify(input.data ?? {})
+  
+  // Merge contract preimage components with custom data
+  // Convert BigInt to string for JSON serialization
+  const mergedData = {
+    ...input.data,
+    timestampSec: typeof input.timestampSec === 'bigint' ? input.timestampSec.toString() : input.timestampSec,
+    identity: input.identity,
+    queueId: input.queueId,
+  }
+  
+  const data = JSON.stringify(mergedData)
   const payload = JSON.stringify({ address: input.address, data, created_at: now })
   const proof_hash = crypto.createHash('sha256').update(payload).digest('hex')
 
@@ -59,4 +73,44 @@ export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefi
 export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefined {
   const db = getDb()
   return db.prepare('SELECT * FROM enrollments WHERE proof_hash = ?').get(proofHash) as Enrollment | undefined
+}
+
+export interface VerifyEnrollmentResult {
+  valid: boolean
+  proof_hash: string
+  computed_hash: string
+}
+
+export function verifyEnrollmentProofHash(proofHash: string): VerifyEnrollmentResult {
+  // Try to find enrollment with case-insensitive hash comparison
+  const db = getDb()
+  const enrollment = db.prepare('SELECT * FROM enrollments WHERE LOWER(proof_hash) = LOWER(?)').get(proofHash) as Enrollment | undefined
+  
+  if (!enrollment) {
+    throw new Error('Enrollment not found')
+  }
+
+  // Parse the enrollment data to extract contract preimage components
+  const data = JSON.parse(enrollment.data) as Record<string, unknown>
+  
+  // Extract timestampSec, identity, and queueId from the data
+  // These should match the contract preimage format
+  // Handle string conversion for BigInt values
+  const timestampSecRaw = data['timestampSec']
+  const timestampSec = typeof timestampSecRaw === 'string' ? BigInt(timestampSecRaw) : (timestampSecRaw as number | bigint)
+  const identity = data['identity'] as string
+  const queueId = data['queueId'] as string
+  
+  if (timestampSec === undefined || !identity || !queueId) {
+    throw new Error('Enrollment data missing required fields for verification')
+  }
+
+  // Compute the contract-style proof hash
+  const computedHash = computeProofHash(timestampSec, identity, queueId)
+  
+  return {
+    valid: computedHash === proofHash.toLowerCase(),
+    proof_hash: proofHash,
+    computed_hash: computedHash
+  }
 }
