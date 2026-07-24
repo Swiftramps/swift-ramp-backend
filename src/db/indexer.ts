@@ -29,7 +29,7 @@ export async function backfillSwaps(log: { info: (msg: string) => void; error: (
     for (const event of events.events) {
       try {
         const value = scValToNative(event.value) as unknown[];
-        const [sender, recipient, receivedAmount] = value as [string, string, bigint];
+        const [sender, , receivedAmount] = value as [string, string, bigint];
         
         insertSwap({
           address: sender,
@@ -77,7 +77,7 @@ export function startIndexer(log: { info: (msg: string) => void; error: (msg: un
       for (const event of events.events) {
         try {
           const value = scValToNative(event.value) as unknown[];
-          const [sender, recipient, receivedAmount] = value as [string, string, bigint];
+          const [sender, , receivedAmount] = value as [string, string, bigint];
           
           insertSwap({
             address: sender,

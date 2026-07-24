@@ -2,14 +2,18 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 
-const DB_FILE = process.env.DB_FILE ?? 'swiftramp.db';
 const MIGRATIONS_DIR = path.join(process.cwd(), 'src', 'db', 'migrations');
 
 let db: Database.Database;
 
 export function initDb() {
-  db = new Database(DB_FILE);
-  db.pragma('journal_mode = WAL');
+  // Read at call time, not module load: tests set DB_FILE before initialising,
+  // and at load time the value would already have been captured.
+  const dbFile = process.env['DB_FILE'] ?? 'swiftramp.db';
+  db = new Database(dbFile);
+  if (dbFile !== ':memory:') {
+    db.pragma('journal_mode = WAL');
+  }
 
   // Initialize migrations table
   db.exec(`
@@ -43,7 +47,7 @@ function runMigrations() {
   }
 }
 
-export function getDb() {
+export function getDb(): Database.Database {
   if (!db) initDb();
   return db;
 }

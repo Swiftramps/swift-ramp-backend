@@ -30,7 +30,7 @@ export function insertSwap(swap: SwapRecord) {
   return stmt.run(swap.address, swap.from_currency, swap.to_currency, swap.amount_in, swap.amount_out, swap.tx_hash, swap.timestamp, swap.status);
 }
 
-export function getSwaps(address: string, filters: { limit?: number; offset?: number; from?: number; to?: number } = {}) {
+export function getSwaps(address: string, filters: { limit?: number | undefined; offset?: number | undefined; from?: number | undefined; to?: number | undefined } = {}) {
   const db = getDb();
   let query = 'SELECT * FROM swaps WHERE address = ?';
   const params: any[] = [address];

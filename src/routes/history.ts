@@ -44,7 +44,7 @@ export async function historyRoutes(app: FastifyInstance) {
         },
       },
     },
-    async (request, reply) => {
+    async (request) => {
       const { address } = request.params;
       const { from, to, limit, offset } = request.query;
       const swaps = getSwaps(address, { from, to, limit, offset });

@@ -81,6 +81,9 @@ Then fill in `.env`:
 | `ORACLE_SECRET_KEY` | Secret key (`S...`) of the contract's `admin` account — get it with `stellar keys show admin` |
 | `CURRENCY_TOKENS_JSON` | JSON map of currency code → token contract address, e.g. `{"USD":"C...","NGN":"C..."}` |
 | `ORACLE_INTERVAL_MS` | How often the rate oracle runs, in milliseconds (default 5 minutes) |
+| `IDENTITY_CONTRACT_ID` | Identity contract (`C...`) emitting the enrolled/cancelled audit events. Optional; without it `GET /audit/:identity` returns 503 |
+| `AUDIT_CACHE_TTL_MS` | How long a synced audit trail is served from cache before re-checking the chain (default `30000`) |
+| `AUDIT_BACKFILL_LEDGERS` | Ledgers to reach back on the first audit sync (default `120960`, roughly 7 days) |
 | `NODE_ENV` | Runtime environment. Only `development` mirrors arbitrary CORS origins. |
 | `ALLOWED_ORIGINS` | Required for browser access in production. Comma-separated exact origins. |
 
@@ -303,6 +306,55 @@ curl http://localhost:4000/audit/oracle
 ```
 
 > **Note:** this reads live from the RPC provider's event stream, which typically only retains recent history (days, not months). For a permanent activity log, add a small database that persists events as they're observed rather than re-querying the ledger on every request.
+
+---
+
+### `GET /audit/:identity`
+Full audit trail for one identity, oldest event first, for off-chain verification of enrolment history.
+
+Contract events are the source of truth. This endpoint is a read-through cache over them: each request tops the local copy up from the chain, then answers from SQLite, so paging deep into a long trail costs no extra RPC calls. Because events are stored as they are observed, the trail outlives the RPC provider's own retention window.
+
+Requires `IDENTITY_CONTRACT_ID`; without it the endpoint returns `503`.
+
+**Query parameters**
+
+| Parameter | Description |
+|---|---|
+| `limit` | Events per page, 1–200 (default `50`) |
+| `offset` | Events to skip (default `0`) |
+| `from` | Only events at or after this Unix ms timestamp |
+| `to` | Only events at or before this Unix ms timestamp |
+
+**Response**
+```json
+{
+  "identity": "G...",
+  "events": [
+    {
+      "type": "enrolled",
+      "proof_hash": "3fa8...",
+      "timestamp": 1767225600000,
+      "ledger_closed_at": "2026-01-01T00:00:00Z",
+      "ledger": 105342,
+      "tx_hash": "9c1d...",
+      "event_id": "0000452312891248640-0000000001"
+    }
+  ],
+  "pagination": { "limit": 50, "offset": 0, "total": 2, "has_more": false },
+  "stale": false,
+  "synced_at": 1767225612000,
+  "last_ledger": 105350
+}
+```
+
+`type` is `enrolled` or `cancelled`. `timestamp` is the ledger close time in Unix milliseconds, not the time the event was indexed, so the trail stays accurate across replays. An identity with no events returns `200` with an empty list rather than `404` — "nothing happened" is a valid audit answer.
+
+If the RPC is unreachable the cached trail is still served with `stale: true`; a stale audit trail beats no audit trail. Callers that cannot accept that should reject on the flag.
+
+**Example curl**
+```bash
+curl "http://localhost:4000/audit/GA...?limit=50&offset=0"
+```
 
 ---
 
