@@ -70,11 +70,6 @@ export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefi
   return db.prepare('SELECT * FROM enrollments WHERE proof_hash = ?').get(proofHash) as Enrollment | undefined
 }
 
-export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefined {
-  const db = getDb()
-  return db.prepare('SELECT * FROM enrollments WHERE proof_hash = ?').get(proofHash) as Enrollment | undefined
-}
-
 export interface VerifyEnrollmentResult {
   valid: boolean
   proof_hash: string
