@@ -43,12 +43,12 @@ export function getEnrollment(id: number): Enrollment | undefined {
 
 export function getEnrollmentsByAddress(address: string): Enrollment[] {
   const db = getDb()
-  return db.prepare('SELECT * FROM enrollments WHERE address = ? ORDER BY created_at DESC').all(address) as Enrollment[]
+  return db.prepare('SELECT * FROM enrollments WHERE address = ? ORDER BY created_at DESC, id DESC').all(address) as Enrollment[]
 }
 
 export function getAllEnrollments(): Enrollment[] {
   const db = getDb()
-  return db.prepare('SELECT * FROM enrollments ORDER BY created_at DESC').all() as Enrollment[]
+  return db.prepare('SELECT * FROM enrollments ORDER BY created_at DESC, id DESC').all() as Enrollment[]
 }
 
 export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefined {
