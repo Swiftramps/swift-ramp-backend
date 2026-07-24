@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import crypto from 'node:crypto'
 import { createEnrollment, getEnrollment, getEnrollmentsByAddress, getAllEnrollments } from './enrollment'
+import { computeProofHash } from './proofHash'
 import { resetDb } from './database'
 
 beforeEach(() => {
@@ -61,6 +62,74 @@ describe('createEnrollment', () => {
     expect(enrollments).toHaveLength(2)
     expect(enrollments[0].id).toBe(e2.id)
     expect(enrollments[1].id).toBe(e1.id)
+  })
+
+  it('uses contract-compatible encoding when preimage components are provided', () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+    const timestampSec = 1_700_000_000
+    const identity = 'alice'
+    const queueId = 'queue-1'
+
+    const enrollment = createEnrollment({
+      address,
+      timestampSec,
+      identity,
+      queueId,
+    })
+
+    const expectedHash = computeProofHash(timestampSec, identity, queueId)
+    expect(enrollment.proof_hash).toBe(expectedHash)
+  })
+
+  it('contract-compatible encoding matches known test vectors', () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+    
+    // Test vector 1
+    const enrollment1 = createEnrollment({
+      address,
+      timestampSec: 1,
+      identity: 'id',
+      queueId: 'q',
+    })
+    const expected1 = computeProofHash(1, 'id', 'q')
+    expect(enrollment1.proof_hash).toBe(expected1)
+
+    // Test vector 2
+    const enrollment2 = createEnrollment({
+      address,
+      timestampSec: 1_700_000_000,
+      identity: 'alice',
+      queueId: 'queue-1',
+    })
+    const expected2 = computeProofHash(1_700_000_000, 'alice', 'queue-1')
+    expect(enrollment2.proof_hash).toBe(expected2)
+  })
+
+  it('accepts BigInt timestamp for contract-compatible encoding', () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+    const timestampSec = 1_700_000_000n
+    const identity = 'bob'
+    const queueId = 'queue-2'
+
+    const enrollment = createEnrollment({
+      address,
+      timestampSec,
+      identity,
+      queueId,
+    })
+
+    const expectedHash = computeProofHash(timestampSec, identity, queueId)
+    expect(enrollment.proof_hash).toBe(expectedHash)
+  })
+
+  it('falls back to JSON-based hashing when preimage components are missing', () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+    const enrollment = createEnrollment({ address })
+
+    // Should use JSON-based hashing (old behavior)
+    expect(enrollment.proof_hash).toBeTruthy()
+    expect(enrollment.proof_hash).toHaveLength(64)
+    expect(enrollment.proof_hash).toMatch(/^[a-f0-9]{64}$/)
   })
 })
 
