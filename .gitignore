@@ -19,6 +19,8 @@ npm-debug.log*
 
 # TypeScript incremental build info
 *.tsbuildinfo
+# Local SQLite databases (created at runtime and by the test suite)
 *.db
+*.db-shm
+*.db-wal
 data/
-

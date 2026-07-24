@@ -28,6 +28,18 @@ export const config = {
   networkPassphrase: process.env['NETWORK_PASSPHRASE'] || 'Test SDF Network ; September 2015',
   swapContractId: required('SWAP_CONTRACT_ID'),
 
+  // Identity contract emitting the enrolled/cancelled audit events. Optional so
+  // deployments that only run the swap side keep booting; /audit/:identity
+  // reports 503 rather than guessing a contract when it is unset.
+  identityContractId: process.env['IDENTITY_CONTRACT_ID'] || '',
+
+  // How long a synced audit trail is served straight from cache before the
+  // next read re-checks the chain.
+  auditCacheTtlMs: Number(process.env['AUDIT_CACHE_TTL_MS'] || 30_000),
+
+  // Ledgers to reach back on the first sync of a contract (~7 days at 5s/ledger).
+  auditBackfillLedgers: Number(process.env['AUDIT_BACKFILL_LEDGERS'] || 120_960),
+
   oracleSecretKey: required('ORACLE_SECRET_KEY'),
 
   currencyTokens: JSON.parse(process.env['CURRENCY_TOKENS_JSON'] || '{}') as Record<string, string>,

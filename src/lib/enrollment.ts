@@ -12,7 +12,7 @@ export interface Enrollment {
 
 export interface CreateEnrollmentInput {
   address: string
-  data?: Record<string, unknown>
+  data?: Record<string, unknown> | undefined
   timestampSec?: number | bigint
   identity?: string
   queueId?: string
