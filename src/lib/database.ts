@@ -1,26 +1,20 @@
-import Database from 'better-sqlite3'
-import path from 'node:path'
-import os from 'node:os'
-import crypto from 'node:crypto'
-import { config } from '../config'
+import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 function getDbPath(): string {
-  if (config.nodeEnv === 'test') {
-    return path.join(os.tmpdir(), `enrollments-${crypto.randomUUID()}.db`)
-  }
-  return path.resolve(process.cwd(), 'data/enrollments.db')
+  return path.join(os.tmpdir(), `enrollments-${Date.now()}-${process.pid}.db`);
 }
 
-let db: Database.Database
-let dbPath: string
+let db: Database.Database;
+let dbPath: string;
 
 export function getDb(): Database.Database {
   if (!db) {
     dbPath = getDbPath()
     db = new Database(dbPath)
-    if (config.nodeEnv !== 'test') {
-      db.pragma('journal_mode = WAL')
-    }
+    db.pragma('journal_mode = WAL')
     migrate(db)
   }
   return db
@@ -42,6 +36,11 @@ export function resetDb() {
   if (db) {
     db.close()
     db = undefined as unknown as Database.Database
-    dbPath = ''
   }
+  if (dbPath && fs.existsSync(dbPath)) {
+    try { fs.unlinkSync(dbPath) } catch {}
+    try { fs.unlinkSync(dbPath + '-shm') } catch {}
+    try { fs.unlinkSync(dbPath + '-wal') } catch {}
+  }
+  dbPath = ''
 }
