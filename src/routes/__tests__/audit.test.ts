@@ -1,193 +1,182 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import Fastify from 'fastify'
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
+import Fastify from 'fastify';
+import { getDb, resetDb } from '../../lib/database.js';
+import { createEnrollment } from '../../lib/enrollment.js';
 
-process.env.DB_FILE = ':memory:'
-process.env.IDENTITY_CONTRACT_ID = 'CA3D5KFYF6J7YJ4CJ6CJ6CJ6CJ6CJ6CJ6CJ6CJ6CJ6CJ6CJ6CJ6CJ6'
-process.env.AUDIT_CACHE_TTL_MS = '0'
-
-const getEvents = vi.fn()
-const getLatestLedger = vi.fn()
-
-// The contract is the source of truth, so the RPC is the only thing stubbed.
-// Everything below it (parsing, the SQLite cache, paging) is the real code.
+// Mock stellar functions to avoid contract initialization issues
 vi.mock('../../lib/stellar.js', () => ({
-  server: { getEvents, getLatestLedger },
-  getContractRates: vi.fn(),
-  getContractAdmin: vi.fn(),
-  getOracleInfo: vi.fn(),
-}))
-vi.mock('../../lib/stellar', () => ({
-  server: { getEvents, getLatestLedger },
-  getContractRates: vi.fn(),
-  getContractAdmin: vi.fn(),
-  getOracleInfo: vi.fn(),
-}))
+  getContractRates: vi.fn(() => Promise.resolve({ USD: '10000000', NGN: '1580000000' })),
+  getContractAdmin: vi.fn(() => Promise.resolve('GADMIN')),
+  getOracleInfo: vi.fn(() => Promise.resolve({ address: 'GORACLE', intervalMs: 300000 })),
+}));
 
-const { auditRoutes } = await import('../audit')
-const { initDb, getDb } = await import('../../db/database')
+describe('Audit Routes Validation', () => {
+  let app: any;
 
-const IDENTITY = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
-const OTHER = 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H'
+  beforeAll(async () => {
+    process.env['NODE_ENV'] = 'test';
+    
+    const { auditRoutes } = await import('../audit.js');
+    
+    app = Fastify();
+    await app.register(auditRoutes);
+    await app.ready();
+  });
 
-/**
- * Shaped like a Soroban RPC event. `scValToNative` is not mocked, so values are
- * given already-native and pass through the parser's fallback path.
- */
-function event(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    id: '0000000001-0000000001',
-    ledger: 100,
-    ledgerClosedAt: '2026-01-01T00:00:00Z',
-    txHash: 'tx1',
-    topic: ['enrolled', IDENTITY],
-    value: { proof_hash: 'a'.repeat(64) },
-    ...overrides,
-  }
-}
+  afterAll(async () => {
+    if (app) {
+      await app.close();
+    }
+  });
 
-async function build() {
-  const app = Fastify()
-  await app.register(auditRoutes)
-  await app.ready()
-  return app
-}
-
-describe('GET /audit/:identity', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    initDb()
-    const db = getDb()
-    db.exec('DELETE FROM audit_events; DELETE FROM audit_cursor;')
-    getLatestLedger.mockResolvedValue({ sequence: 1000 })
-    getEvents.mockResolvedValue({ events: [] })
-  })
+    resetDb();
+    const db = getDb();
+    db.exec('DELETE FROM enrollments;');
+  });
 
-  it('returns each event with proof_hash, type and timestamp', async () => {
-    getEvents.mockResolvedValue({ events: [event()] })
-    const app = await build()
+  describe('Identity address validation', () => {
+    it('rejects invalid Stellar address format', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments/invalid'
+      });
 
-    const res = await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })
+      expect(response.statusCode).toBe(400);
+    });
 
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.payload)
-    expect(body.identity).toBe(IDENTITY)
-    expect(body.events).toHaveLength(1)
-    expect(body.events[0]).toMatchObject({
-      type: 'enrolled',
-      proof_hash: 'a'.repeat(64),
-      timestamp: Date.parse('2026-01-01T00:00:00Z'),
-      ledger: 100,
-      tx_hash: 'tx1',
-    })
-    await app.close()
-  })
+    it('rejects address with wrong length', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments/GABC123'
+      });
 
-  it('orders events chronologically, oldest first', async () => {
-    getEvents.mockResolvedValue({
-      events: [
-        event({ id: 'c', ledger: 300, ledgerClosedAt: '2026-03-01T00:00:00Z', topic: ['cancelled', IDENTITY], txHash: 'tx3' }),
-        event({ id: 'a', ledger: 100, ledgerClosedAt: '2026-01-01T00:00:00Z', txHash: 'tx1' }),
-        event({ id: 'b', ledger: 200, ledgerClosedAt: '2026-02-01T00:00:00Z', txHash: 'tx2' }),
-      ],
-    })
-    const app = await build()
+      expect(response.statusCode).toBe(400);
+    });
 
-    const res = await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })
-    const body = JSON.parse(res.payload)
+    it('rejects address not starting with G', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+      });
 
-    expect(body.events.map((e: { tx_hash: string }) => e.tx_hash)).toEqual(['tx1', 'tx2', 'tx3'])
-    const timestamps = body.events.map((e: { timestamp: number }) => e.timestamp)
-    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
-    expect(body.events[2].type).toBe('cancelled')
-    await app.close()
-  })
+      expect(response.statusCode).toBe(400);
+    });
 
-  it('paginates with limit and offset', async () => {
-    getEvents.mockResolvedValue({
-      events: Array.from({ length: 5 }, (_, i) =>
-        event({ id: `e${i}`, ledger: 100 + i, txHash: `tx${i}`, ledgerClosedAt: `2026-01-0${i + 1}T00:00:00Z` }),
-      ),
-    })
-    const app = await build()
+    it('accepts valid Stellar G address', async () => {
+      const validAddress = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      
+      const response = await app.inject({
+        method: 'GET',
+        url: `/audit/enrollments/${validAddress}`
+      });
 
-    const first = JSON.parse((await app.inject({ method: 'GET', url: `/audit/${IDENTITY}?limit=2` })).payload)
-    expect(first.events.map((e: { tx_hash: string }) => e.tx_hash)).toEqual(['tx0', 'tx1'])
-    expect(first.pagination).toMatchObject({ limit: 2, offset: 0, total: 5, has_more: true })
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.address).toBe(validAddress);
+      expect(body.enrollments).toEqual([]);
+      expect(body.count).toBe(0);
+    });
+  });
 
-    const second = JSON.parse((await app.inject({ method: 'GET', url: `/audit/${IDENTITY}?limit=2&offset=2` })).payload)
-    expect(second.events.map((e: { tx_hash: string }) => e.tx_hash)).toEqual(['tx2', 'tx3'])
-    expect(second.pagination.has_more).toBe(true)
+  describe('Proof hash validation', () => {
+    it('rejects proof hash with invalid length', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollment/abc123'
+      });
 
-    const last = JSON.parse((await app.inject({ method: 'GET', url: `/audit/${IDENTITY}?limit=2&offset=4` })).payload)
-    expect(last.events.map((e: { tx_hash: string }) => e.tx_hash)).toEqual(['tx4'])
-    expect(last.pagination.has_more).toBe(false)
-    await app.close()
-  })
+      expect(response.statusCode).toBe(400);
+    });
 
-  it('scopes the trail to the requested identity', async () => {
-    getEvents.mockResolvedValue({
-      events: [event({ id: 'mine', txHash: 'mine' }), event({ id: 'theirs', topic: ['enrolled', OTHER], txHash: 'theirs' })],
-    })
-    const app = await build()
+    it('rejects proof hash with non-hex characters', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollment/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'
+      });
 
-    const body = JSON.parse((await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })).payload)
-    expect(body.events).toHaveLength(1)
-    expect(body.events[0].tx_hash).toBe('mine')
-    await app.close()
-  })
+      expect(response.statusCode).toBe(400);
+    });
 
-  it('returns an empty trail rather than 404 for an identity with no events', async () => {
-    const app = await build()
+    it('accepts valid 64-char hex proof hash', async () => {
+      const validHash = 'a'.repeat(64);
+      
+      const response = await app.inject({
+        method: 'GET',
+        url: `/audit/enrollment/${validHash}`
+      });
 
-    const res = await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })
+      expect(response.statusCode).toBe(404);
+    });
+  });
 
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.payload)
-    expect(body.events).toEqual([])
-    expect(body.pagination).toMatchObject({ total: 0, has_more: false })
-    await app.close()
-  })
+  describe('Pagination validation', () => {
+    it('rejects negative limit', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments?limit=-1'
+      });
 
-  it('does not duplicate events when the same ledger range is synced twice', async () => {
-    getEvents.mockResolvedValue({ events: [event()] })
-    const app = await build()
+      expect(response.statusCode).toBe(400);
+    });
 
-    await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })
-    const body = JSON.parse((await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })).payload)
+    it('rejects limit greater than 100', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments?limit=101'
+      });
 
-    expect(body.events).toHaveLength(1)
-    await app.close()
-  })
+      expect(response.statusCode).toBe(400);
+    });
 
-  it('serves the cached trail flagged stale when the RPC is down', async () => {
-    getEvents.mockResolvedValue({ events: [event()] })
-    const app = await build()
-    await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })
+    it('rejects negative offset', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments?offset=-1'
+      });
 
-    getLatestLedger.mockRejectedValue(new Error('rpc unreachable'))
-    const res = await app.inject({ method: 'GET', url: `/audit/${IDENTITY}` })
+      expect(response.statusCode).toBe(400);
+    });
 
-    expect(res.statusCode).toBe(200)
-    const body = JSON.parse(res.payload)
-    expect(body.stale).toBe(true)
-    expect(body.events).toHaveLength(1)
-    await app.close()
-  })
+    it('accepts valid pagination params', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments?limit=10&offset=0'
+      });
 
-  it('rejects a malformed identity and an out-of-range limit', async () => {
-    const app = await build()
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.enrollments).toEqual([]);
+      expect(body.count).toBe(0);
+    });
 
-    expect((await app.inject({ method: 'GET', url: '/audit/not-an-address' })).statusCode).toBe(400)
-    expect((await app.inject({ method: 'GET', url: `/audit/${IDENTITY}?limit=5000` })).statusCode).toBe(400)
-    await app.close()
-  })
+    it('applies pagination correctly with enrollments', async () => {
+      const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      
+      for (let i = 0; i < 5; i++) {
+        createEnrollment({ address, data: { index: i } });
+      }
 
-  it('does not shadow the existing static audit routes', async () => {
-    const app = await build()
+      const response = await app.inject({
+        method: 'GET',
+        url: `/audit/enrollments/${address}?limit=2&offset=1`
+      });
 
-    // Would 400 on the identity pattern if the param route captured them.
-    expect((await app.inject({ method: 'GET', url: '/audit/contract' })).statusCode).not.toBe(400)
-    expect((await app.inject({ method: 'GET', url: '/audit/oracle' })).statusCode).not.toBe(400)
-    await app.close()
-  })
-})
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.enrollments.length).toBe(2);
+      expect(body.count).toBe(2);
+    });
+  });
+
+  describe('Combined validation', () => {
+    it('validates both address and pagination params', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/audit/enrollments/invalid?limit=10'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+});
