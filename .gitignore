@@ -19,3 +19,6 @@ npm-debug.log*
 
 # TypeScript incremental build info
 *.tsbuildinfo
+*.db
+data/
+
