@@ -52,7 +52,7 @@ describe('POST /enrollments/:id/cancel', () => {
     expect(body.message).toBe('Cancelled successfully');
     expect(body.audit_trail).toBeDefined();
     expect(body.audit_trail.proof_hash).toBe(enrollment.proof_hash);
-    expect(body.audit_trail.cancelled_at).toBeTruthy();
+    expect(body.audit_trail.canceled_at).toBeTruthy();
 
     const { submitCancelToContract } = await import('../../lib/stellar.js');
     expect(submitCancelToContract).toHaveBeenCalledWith(enrollment.proof_hash);
