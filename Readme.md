@@ -358,6 +358,165 @@ curl "http://localhost:4000/audit/GA...?limit=50&offset=0"
 
 ---
 
+## Enrollment & proof verification
+
+Enrollments commit an identity to a queue at a point in time via a deterministic
+SHA-256 proof hash. The same preimage layout is used on-chain and here:
+
+```
+preimage = identity (32 raw bytes) || queue_id (UTF-8) || timestamp (8 bytes big-endian)
+proof_hash = SHA-256(preimage)
+```
+
+### `POST /enrollment`
+
+Computes the proof hash for a preimage without persisting anything — useful for
+clients that want to preview the hash before submitting.
+
+**Request body**
+```json
+{ "timestampSec": 1767225600, "identity": "GDNS...", "queueId": "remit-queue-01" }
+```
+
+**Response**
+```json
+{ "proofHash": "3fa8b2c1..." }
+```
+
+**Error cases**
+- 400: Missing or invalid preimage fields
+
+**Example curl**
+```bash
+curl -X POST http://localhost:4000/enrollment \
+  -H "Content-Type: application/json" \
+  -d '{"timestampSec": 1767225600, "identity": "GDNS...", "queueId": "remit-queue-01"}'
+```
+
+---
+
+### `POST /enrollment/verify`
+
+Checks that a supplied proof hash matches the one derived from the given
+preimage. Returns `{ valid: true }` on a match, `400` otherwise.
+
+**Request body**
+```json
+{ "timestampSec": 1767225600, "identity": "GDNS...", "queueId": "remit-queue-01", "proofHash": "3fa8b2c1..." }
+```
+
+**Response**
+```json
+{ "valid": true }
+```
+
+**Error cases**
+- 400: Hash mismatch or missing/invalid fields
+
+---
+
+### `POST /enrollments`
+
+Persists an enrollment and returns its stored record including the `proof_hash`.
+Preimage fields (`timestampSec`, `identity`, `queueId`) are optional; when all
+three are present the hash uses the contract-compatible encoding above,
+otherwise a JSON payload hash is used for backward compatibility.
+
+**Request body**
+```json
+{
+  "address": "GDNS...",
+  "data": { "custom": "value" },
+  "timestampSec": 1767225600,
+  "identity": "GDNS...",
+  "queueId": "remit-queue-01"
+}
+```
+
+**Response (201)**
+```json
+{
+  "id": 1,
+  "address": "GDNS...",
+  "data": "{\"custom\":\"value\"}",
+  "proof_hash": "3fa8b2c1...",
+  "status": "active",
+  "created_at": "2026-01-01T00:00:00.000Z"
+}
+```
+
+**Error cases**
+- 400: Invalid Stellar address
+
+---
+
+### `GET /enrollments/:id`
+
+Fetches a single enrollment by its numeric id.
+
+**Response**
+```json
+{ "id": 1, "address": "GDNS...", "data": "{}", "proof_hash": "3fa8b2c1...", "status": "active", "canceled_at": null, "canceled_by": null, "created_at": "2026-01-01T00:00:00.000Z" }
+```
+
+**Error cases**
+- 404: Enrollment not found
+
+---
+
+### `GET /enrollments/address/:address`
+
+Lists all enrollments for a Stellar address, newest first.
+
+**Response**
+```json
+{ "address": "GDNS...", "enrollments": [] }
+```
+
+---
+
+### `GET /enrollments/:hash/verify`
+
+Verifies a recorded proof hash against the stored enrollment's preimage
+components. Returns whether the stored hash can be reproduced from the
+enrollment's own preimage.
+
+**Response**
+```json
+{ "valid": true, "proof_hash": "3fa8b2c1...", "computed_hash": "3fa8b2c1..." }
+```
+
+**Error cases**
+- 404: No enrollment found with that hash
+- 400: Invalid hash format or stored enrollment missing preimage fields
+
+---
+
+### `POST /enrollments/:id/cancel`
+
+Cancels an active enrollment, submits the cancel to the contract, and returns
+an audit trail with the original `proof_hash`, `canceled_at` and optional
+`canceled_by` (a Stellar address in the request body).
+
+**Request body (optional)**
+```json
+{ "canceledBy": "GDNS..." }
+```
+
+**Response**
+```json
+{
+  "message": "Cancelled successfully",
+  "audit_trail": { "proof_hash": "3fa8b2c1...", "canceled_at": "2026-01-01T00:00:00.000Z", "canceled_by": "GDNS..." }
+}
+```
+
+**Error cases**
+- 404: Enrollment not found
+- 400: Already cancelled
+
+---
+
 ## The rate oracle
 
 On startup, and then every `ORACLE_INTERVAL_MS`, the service:
