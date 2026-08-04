@@ -155,19 +155,20 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     }
   )
 
-  app.post<{ Params: { id: number } }>(
+  app.post<{ Params: { id: number }; Body: { canceledBy?: string } }>(
     '/enrollments/:id/cancel',
     { schema: cancelSchema },
     async (request, reply) => {
       try {
-        const result = cancelEnrollment(request.params.id)
+        const result = cancelEnrollment(request.params.id, request.body?.canceledBy)
         const { submitCancelToContract } = await import('../lib/stellar')
         await submitCancelToContract(result.proof_hash)
         return {
           message: 'Cancelled successfully',
           audit_trail: {
             proof_hash: result.proof_hash,
-            cancelled_at: result.cancelled_at,
+            canceled_at: result.canceled_at,
+            canceled_by: result.canceled_by,
           },
         }
       } catch (error) {

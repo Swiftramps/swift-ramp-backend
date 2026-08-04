@@ -8,13 +8,16 @@ export interface Enrollment {
   data: string
   proof_hash: string | null
   status: 'active' | 'cancelled'
+  canceled_at: string | null
+  canceled_by: string | null
   created_at: string
 }
 
 export interface CancelEnrollmentResult {
   id: number
   proof_hash: string
-  cancelled_at: string
+  canceled_at: string
+  canceled_by: string | null
 }
 
 export interface CreateEnrollmentInput {
@@ -62,6 +65,8 @@ export function createEnrollment(input: CreateEnrollmentInput): Enrollment {
     data,
     proof_hash,
     status: 'active',
+    canceled_at: null,
+    canceled_by: null,
     created_at: now,
   }
 }
@@ -86,7 +91,7 @@ export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefi
   return db.prepare('SELECT * FROM enrollments WHERE proof_hash = ?').get(proofHash) as Enrollment | undefined
 }
 
-export function cancelEnrollment(id: number): CancelEnrollmentResult {
+export function cancelEnrollment(id: number, canceledBy?: string): CancelEnrollmentResult {
   const db = getDb()
   const enrollment = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(id) as Enrollment | undefined
 
@@ -97,13 +102,18 @@ export function cancelEnrollment(id: number): CancelEnrollmentResult {
     throw new Error('Already cancelled')
   }
 
-  const cancelledAt = new Date().toISOString()
-  db.prepare("UPDATE enrollments SET status = 'cancelled' WHERE id = ?").run(id)
+  const canceledAt = new Date().toISOString()
+  db.prepare("UPDATE enrollments SET status = 'cancelled', canceled_at = ?, canceled_by = ? WHERE id = ?").run(
+    canceledAt,
+    canceledBy ?? null,
+    id,
+  )
 
   return {
     id: enrollment.id,
     proof_hash: enrollment.proof_hash ?? '',
-    cancelled_at: cancelledAt,
+    canceled_at: canceledAt,
+    canceled_by: canceledBy ?? null,
   }
 }
 
