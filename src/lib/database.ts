@@ -26,8 +26,10 @@ function migrate(db: Database.Database) {
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       address    TEXT    NOT NULL,
       data       TEXT    NOT NULL DEFAULT '{}',
-      proof_hash TEXT,
+      proof_hash VARCHAR(64),
       status     TEXT    NOT NULL DEFAULT 'active',
+      canceled_at TIMESTAMP,
+      canceled_by VARCHAR(56),
       created_at TEXT    NOT NULL
     )
   `)
