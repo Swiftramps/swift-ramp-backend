@@ -32,8 +32,16 @@ export function createEnrollment(input: CreateEnrollmentInput): Enrollment {
   }
   
   const data = JSON.stringify(mergedData)
-  const payload = JSON.stringify({ address: input.address, data, created_at: now })
-  const proof_hash = crypto.createHash('sha256').update(payload).digest('hex')
+  
+  // Use contract-compatible encoding when all preimage components are present
+  let proof_hash: string
+  if (input.timestampSec !== undefined && input.identity && input.queueId) {
+    proof_hash = computeProofHash(input.timestampSec, input.identity, input.queueId)
+  } else {
+    // Fallback to JSON-based hashing for backward compatibility
+    const payload = JSON.stringify({ address: input.address, data, created_at: now })
+    proof_hash = crypto.createHash('sha256').update(payload).digest('hex')
+  }
 
   const stmt = db.prepare(`
     INSERT INTO enrollments (address, data, proof_hash, created_at)
