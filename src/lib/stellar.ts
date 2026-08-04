@@ -217,6 +217,54 @@ export async function submitCancelToContract(proofHash: string): Promise<boolean
   return true;
 }
 
+export class IdentityNotFoundError extends Error {
+  constructor(address: string) {
+    super(`Identity not found: ${address}`)
+    this.name = 'IdentityNotFoundError'
+  }
+}
+
+/**
+ * Read-only passthrough to the identity contract's `get_identity_status`.
+ * Simulates the call using the oracle account as a throwaway transaction
+ * source (never submitted), so no signature is required.
+ *
+ * The contract's `IdentityStatus` unit enum decodes to its u32 variant
+ * index: 0 = Active, 1 = Revoked, 2 = Suspended.
+ *
+ * Throws `IdentityNotFoundError` when the contract reports the identity is
+ * unregistered (contract error #3), and a generic error when the simulation
+ * fails for any other reason.
+ */
+export async function getIdentityStatus(address: string): Promise<string> {
+  if (!config.identityContractId) {
+    throw new Error('identity contract not configured')
+  }
+  const account = await server.getAccount(oracleKeypair.publicKey())
+  const identityContract = new Contract(config.identityContractId)
+  const op = identityContract.call('get_identity_status', new Address(address).toScVal())
+  const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: config.networkPassphrase })
+    .addOperation(op)
+    .setTimeout(30)
+    .build()
+
+  const sim = await server.simulateTransaction(tx)
+  if (rpc.Api.isSimulationError(sim)) {
+    // Err(IdentityNotFound) surfaces in simulation as contract error #3.
+    if (/#3|IdentityNotFound/i.test(sim.error)) {
+      throw new IdentityNotFoundError(address)
+    }
+    throw new Error(`identity status simulation failed: ${sim.error}`)
+  }
+  if (!sim.result) {
+    throw new Error('identity status simulation returned no result')
+  }
+  const raw = Number(scValToNative(sim.result.retval))
+  if (raw === 1) return 'revoked'
+  if (raw === 2) return 'suspended'
+  return 'active'
+}
+
 async function pollUntilConfirmed(hash: string, timeoutMs = 30_000): Promise<string> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
