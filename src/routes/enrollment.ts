@@ -132,7 +132,7 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     { schema: proofHashVerifySchema },
     async (request, reply) => {
       const { hash } = request.params
-      
+
       try {
         const result = verifyEnrollmentProofHash(hash)
         return result
