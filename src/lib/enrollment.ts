@@ -7,7 +7,14 @@ export interface Enrollment {
   address: string
   data: string
   proof_hash: string | null
+  status: 'active' | 'cancelled'
   created_at: string
+}
+
+export interface CancelEnrollmentResult {
+  id: number
+  proof_hash: string
+  cancelled_at: string
 }
 
 export interface CreateEnrollmentInput {
@@ -54,6 +61,7 @@ export function createEnrollment(input: CreateEnrollmentInput): Enrollment {
     address: input.address,
     data,
     proof_hash,
+    status: 'active',
     created_at: now,
   }
 }
@@ -76,6 +84,27 @@ export function getAllEnrollments(): Enrollment[] {
 export function getEnrollmentByProofHash(proofHash: string): Enrollment | undefined {
   const db = getDb()
   return db.prepare('SELECT * FROM enrollments WHERE proof_hash = ?').get(proofHash) as Enrollment | undefined
+}
+
+export function cancelEnrollment(id: number): CancelEnrollmentResult {
+  const db = getDb()
+  const enrollment = db.prepare('SELECT * FROM enrollments WHERE id = ?').get(id) as Enrollment | undefined
+
+  if (!enrollment) {
+    throw new Error('Enrollment not found')
+  }
+  if (enrollment.status === 'cancelled') {
+    throw new Error('Already cancelled')
+  }
+
+  const cancelledAt = new Date().toISOString()
+  db.prepare("UPDATE enrollments SET status = 'cancelled' WHERE id = ?").run(id)
+
+  return {
+    id: enrollment.id,
+    proof_hash: enrollment.proof_hash ?? '',
+    cancelled_at: cancelledAt,
+  }
 }
 
 export interface VerifyEnrollmentResult {

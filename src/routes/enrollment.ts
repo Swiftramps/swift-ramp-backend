@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { computeProofHash, verifyProofHash } from '../lib/proofHash'
-import { createEnrollment, getEnrollment, getEnrollmentsByAddress, verifyEnrollmentProofHash } from '../lib/enrollment'
+import { createEnrollment, getEnrollment, getEnrollmentsByAddress, verifyEnrollmentProofHash, cancelEnrollment } from '../lib/enrollment'
 
 const enrollSchema = {
   body: {
@@ -64,6 +64,16 @@ const verifySchema = {
       identity: { type: 'string', minLength: 1 },
       queueId: { type: 'string', minLength: 1 },
       proofHash: { type: 'string', pattern: '^[0-9a-fA-F]{64}$' },
+    },
+  },
+}
+
+const cancelSchema = {
+  params: {
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'integer' },
     },
   },
 }
@@ -141,6 +151,31 @@ export async function enrollmentRoutes(app: FastifyInstance) {
           return reply.code(404).send({ error: 'Enrollment not found' })
         }
         return reply.code(400).send({ error: error instanceof Error ? error.message : 'Verification failed' })
+      }
+    }
+  )
+
+  app.post<{ Params: { id: number } }>(
+    '/enrollments/:id/cancel',
+    { schema: cancelSchema },
+    async (request, reply) => {
+      try {
+        const result = cancelEnrollment(request.params.id)
+        const { submitCancelToContract } = await import('../lib/stellar')
+        await submitCancelToContract(result.proof_hash)
+        return {
+          message: 'Cancelled successfully',
+          audit_trail: {
+            proof_hash: result.proof_hash,
+            cancelled_at: result.cancelled_at,
+          },
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Cancellation failed'
+        if (message === 'Enrollment not found') {
+          return reply.code(404).send({ error: message })
+        }
+        return reply.code(400).send({ error: message })
       }
     }
   )
