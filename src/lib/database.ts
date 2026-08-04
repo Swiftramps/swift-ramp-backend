@@ -27,6 +27,7 @@ function migrate(db: Database.Database) {
       address    TEXT    NOT NULL,
       data       TEXT    NOT NULL DEFAULT '{}',
       proof_hash TEXT,
+      status     TEXT    NOT NULL DEFAULT 'active',
       created_at TEXT    NOT NULL
     )
   `)

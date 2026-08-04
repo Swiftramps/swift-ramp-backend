@@ -208,6 +208,15 @@ export async function getOracleInfo(): Promise<{ address: string; intervalMs: nu
   }
 }
 
+/**
+ * Submits a cancel request for an enrollment to the identity contract.
+ * Stub for now: returns true once the on-chain cancel path is wired up.
+ */
+export async function submitCancelToContract(proofHash: string): Promise<boolean> {
+  void proofHash
+  return true;
+}
+
 async function pollUntilConfirmed(hash: string, timeoutMs = 30_000): Promise<string> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
